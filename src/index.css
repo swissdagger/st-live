@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styling to match the app theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 4px;
+  border: 1px solid #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+::-webkit-scrollbar-corner {
+  background: #1a1a1a;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a #1a1a1a;
+}
+
+/* Hide chart logos and watermarks */
+/* Common logo/watermark selectors */
+[class*="logo"],
+[class*="watermark"],
+[class*="brand"],
+[id*="logo"],
+[id*="watermark"],
+[id*="brand"] {
+  display: none !important;
+}
+
+/* TradingView specific logo hiding */
+.tv-logo,
+.tv-watermark,
+.tradingview-logo,
+.tradingview-watermark {
+  display: none !important;
+}
+
+/* Lightweight Charts specific logo hiding */
+.lw-logo,
+.lw-watermark,
+.lightweight-charts-logo {
+  display: none !important;
+}
+
+/* Generic chart library logo hiding */
+.chart-logo,
+.chart-watermark,
+.chart-brand {
+  display: none !important;
+}
+
+/* Hide any element with logo-related text content */
+div[title*="logo" i],
+div[title*="watermark" i],
+div[title*="brand" i],
+span[title*="logo" i],
+span[title*="watermark" i],
+span[title*="brand" i] {
+  display: none !important;
+}
+
+/* Hide elements positioned in bottom-left corner that might be logos */
+div[style*="position: absolute"][style*="bottom"][style*="left"],
+div[style*="position:absolute"][style*="bottom"][style*="left"] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Additional specific targeting for common chart library logos */
+.tv-logo__link,
+.tv-logo__text,
+.tv-attribution,
+.tv-attribution__link {
+  display: none !important;
+}
+
+/* Hide any SVG logos that might appear */
+svg[class*="logo"],
+svg[id*="logo"] {
+  display: none !important;
+}
+
+/* Hide any images that might be logos in the chart area */
+img[src*="logo" i],
+img[alt*="logo" i],
+img[title*="logo" i] {
+  display: none !important;
+}
