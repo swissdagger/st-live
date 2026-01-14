@@ -300,7 +300,7 @@ const Dashboard: React.FC = () => {
                             </p>
                             <p className="text-white font-small">
 Our technology operates on the assumption that all directional changes start from the shortest observable timescale and propagate to longer timescales as it continues.</p>
-<p className="text-white font-small">For this live demonstration, we have selected the following timescales to illustrate how change can be tracked in real time with our technology.</p>
+<p className="text-white font-small">For this live demonstration, we have selected the following timescales to illustrate how non-linear change can be tracked in real time with our technology.</p>
 <p className='text-white font-small'>1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, and 1d.</p>
 <p className="text-white text-sm">Note that we are not using the shortest observable timescales for simplicity.</p>
 <p className='text-white font-small'>
