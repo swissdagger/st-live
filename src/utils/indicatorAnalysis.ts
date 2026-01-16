@@ -32,6 +32,19 @@ interface ActiveChain {
     isActive: boolean;
 }
 
+// Cache for historical prices to persist even as live data moves forward
+const historicalPriceCache = new Map<string, number>();
+
+export const cacheHistoricalPrice = (datetime: string, timeframe: string, price: number) => {
+    const key = `${datetime}_${timeframe}`;
+    historicalPriceCache.set(key, price);
+};
+
+export const getCachedPrice = (datetime: string, timeframe: string): number | null => {
+    const key = `${datetime}_${timeframe}`;
+    return historicalPriceCache.get(key) || null;
+};
+
 function timeframeToSeconds(timeframe: string): number {
     const match = timeframe.match(/^(\d+)(s|m|h|d|w|mo)$/);
     if (!match) return 0;
@@ -54,11 +67,18 @@ function getOpenPriceAtDatetime(csvData: CandlestickData[], datetime: string, pr
     const targetTime = new Date(datetime.replace(' ', 'T') + 'Z').getTime() / 1000;
 
     if (priceMap) {
-        return priceMap.get(targetTime) || 0;
+        const price = priceMap.get(targetTime);
+        if (price) return price;
     }
 
     const candle = csvData.find(c => c.time === targetTime);
-    return candle?.open || 0;
+    if (candle?.open) return candle.open;
+    
+    // Check cache as fallback
+    const cachedPrice = getCachedPrice(datetime, 'unknown');
+    if (cachedPrice !== null) return cachedPrice;
+    
+    return 0;
 }
 
 export function extractTrendIndicators(
@@ -82,6 +102,9 @@ export function extractTrendIndicators(
     const timeToPriceMap = new Map<number, number>();
     csvData.forEach(candle => {
         timeToPriceMap.set(candle.time, candle.open);
+        // Cache prices as we process them
+        const datetime = new Date(candle.time * 1000).toISOString().slice(0, 19).replace('T', ' ');
+        cacheHistoricalPrice(datetime, 'all', candle.open);
     });
 
     const timeframeIndexMap = new Map<string, number>();
@@ -103,6 +126,9 @@ export function extractTrendIndicators(
         if (pred.value !== 0) {
             if (lastSignal === null || pred.value !== lastSignal) {
                 const openPrice = getOpenPriceAtDatetime(csvData, pred.datetime, timeToPriceMap);
+                // Cache the price for this initial indicator
+                cacheHistoricalPrice(pred.datetime, highestFreqTimeframe, openPrice);
+                
                 initialIndicators.push({
                     datetime: pred.datetime,
                     trend_type: pred.value,
@@ -209,9 +235,13 @@ export function extractTrendIndicators(
             if (signal.timeframeIndex === chain.nextExpectedTimeframeIndex) {
                 if (signal.value === chain.trendType) {
                     // This is a propagation! The chain continues to the next level
-                    chain.propagationLevel++;
-                    const propOpenPrice = getOpenPriceAtDatetime(csvData, signal.datetimeString, timeToPriceMap);
-                    const directionalChange = chain.initialOpenPrice !== 0
+                      chain.propagationLevel++;
+                      const propOpenPrice = getOpenPriceAtDatetime(csvData, signal.datetimeString, timeToPriceMap);
+                    
+                      // Cache the propagation price
+                      cacheHistoricalPrice(signal.datetimeString, signal.timeframe, propOpenPrice);
+                    
+                      const directionalChange = chain.initialOpenPrice !== 0
                         ? ((propOpenPrice - chain.initialOpenPrice) / chain.initialOpenPrice) * 100
                         : 0;
 

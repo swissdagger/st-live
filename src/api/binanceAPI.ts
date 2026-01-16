@@ -222,6 +222,36 @@ const candlestickData: Record<string, CandlestickData[]> = {};
 // NEW: Mutex to prevent concurrent polling cycles
 let isKlinePollingInProgress = false;
 
+// NEW: Persistent cache for candlestick data with timestamps
+const candlestickDataCache: Map<string, {
+    data: CandlestickData[];
+    timestamp: number;
+}> = new Map();
+
+const CACHE_DURATION = 30000; // 30 seconds cache duration
+
+// Helper to get cached data if still valid
+const getCachedCandlestickData = (key: string): CandlestickData[] | null => {
+    const cached = candlestickDataCache.get(key);
+    if (!cached) return null;
+    
+    const now = Date.now();
+    if (now - cached.timestamp > CACHE_DURATION) {
+        candlestickDataCache.delete(key);
+        return null;
+    }
+    
+    return cached.data;
+};
+
+// Helper to cache candlestick data
+const setCachedCandlestickData = (key: string, data: CandlestickData[]) => {
+    candlestickDataCache.set(key, {
+        data: [...data],
+        timestamp: Date.now()
+    });
+};
+
 // Timeout wrapper to prevent indefinitely hanging requests
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> => {
     return Promise.race([
@@ -241,7 +271,18 @@ export const fetchKlineData = async (
   symbol: CryptoSymbol,
   limit: number = 1
 ): Promise<CandlestickData[]> => {
+  const key = `${symbol}-${timeframe.id}`; // Declare key once at the top
+  
   try {
+    // Check cache first for initial load (limit !== 1)
+    if (limit !== 1) {
+        const cachedData = getCachedCandlestickData(key);
+        if (cachedData && cachedData.length >= timeframe.dataLimit * 0.9) {
+            console.log(`[CACHE] Using cached data for ${key} (${cachedData.length} candles)`);
+            return cachedData;
+        }
+    }
+    
     // Determine the actual limit to use
     let requestLimit: number;
     if (limit === 1) {
@@ -322,8 +363,6 @@ export const fetchKlineData = async (
       close: parseFloat(item[4]),
     }));
     
-    const key = `${symbol}-${timeframe.id}`;
-    
     if (limit === 1) {
       // Update cache with the latest candle
       if (candlestickData[key]) {
@@ -340,11 +379,21 @@ export const fetchKlineData = async (
     } else {
       // Initial data load
       candlestickData[key] = formattedData;
+      // Cache the data for future loads
+      setCachedCandlestickData(key, formattedData);
     }
     
     return candlestickData[key] || [];
   } catch (error) {
     console.error(`Error fetching kline data for ${timeframe.label}:`, error);
+    
+    // Try to return cached data on error (key already declared at top)
+    const cachedData = getCachedCandlestickData(key);
+    if (cachedData) {
+        console.log(`[CACHE] Returning cached data after error for ${key}`);
+        return cachedData;
+    }
+    
     return [];
   }
 };
@@ -495,4 +544,22 @@ export const cleanupConnections = () => {
   activeSymbolTimeframes.clear();
   isKlinePollingInProgress = false;
   console.log('[POLLING] Cleanup complete');
+};
+
+// New function to clear specific symbol cache
+export const clearSymbolCache = (symbol: CryptoSymbol) => {
+    const keysToDelete: string[] = [];
+    candlestickDataCache.forEach((_, key) => {
+        if (key.startsWith(symbol)) {
+            keysToDelete.push(key);
+        }
+    });
+    keysToDelete.forEach(key => candlestickDataCache.delete(key));
+    console.log(`[CACHE] Cleared cache for ${symbol} (${keysToDelete.length} entries)`);
+};
+
+// New function to clear all caches
+export const clearAllCaches = () => {
+    candlestickDataCache.clear();
+    console.log('[CACHE] Cleared all candlestick caches');
 };

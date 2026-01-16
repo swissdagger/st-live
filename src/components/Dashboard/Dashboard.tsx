@@ -7,8 +7,10 @@ import { CryptoSymbol, TimeframeConfig, PredictionEntry, CandlestickData } from 
 import { SUPPORTED_PREDICTION_INTERVALS, addPollingTicker } from '../../api/sumtymeAPI';
 import { Info, X, Calendar, Search } from 'lucide-react';
 import { loadPredictionsForTicker } from '../../services/predictionService';
-import { extractTrendIndicators, Propagation, InitialIndicator } from '../../utils/indicatorAnalysis';
+import { extractTrendIndicators, Propagation, InitialIndicator, getCachedPrice } from '../../utils/indicatorAnalysis';
 import { MultiSelect } from '../common/MultiSelect';
+import { supabase } from '../../lib/supabase';
+
 
 // Helper to parse dates consistently
 const parseCustomDateTime = (dateStr: string): Date | null => {
@@ -22,12 +24,6 @@ const parseCustomDateTime = (dateStr: string): Date | null => {
     return isNaN(parsed.getTime()) ? null : parsed;
 };
 
-// Simplified PriceCell: No fetching, just display
-const PriceCell: React.FC<{
-    price: number;
-}> = ({ price }) => {
-    return <span>{price && price !== 0 ? price.toFixed(2) : '0.00'}</span>;
-};
 
 const Dashboard: React.FC = () => {
     const [currentSymbol, setCurrentSymbol] = useState<CryptoSymbol>('BTCUSDT');
@@ -50,6 +46,7 @@ const Dashboard: React.FC = () => {
     const [propagationsPage, setPropagationsPage] = useState(1);
     const itemsPerPage = 30;
 
+    const [isLoadingData, setIsLoadingData] = useState(false);
     const [userSelectedTimeframes, setUserSelectedTimeframes] = useState<TimeframeConfig[]>(() => 
         getInitialTimeframes(currentSymbol, false)
     );
@@ -57,6 +54,99 @@ const Dashboard: React.FC = () => {
     const [quadViewTickers, setQuadViewTickers] = useState<CryptoSymbol[]>(['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT']);
     
     const [candlestickData, setCandlestickData] = useState<CandlestickData[]>([]); // ← Add this line
+    const [allTimeframeData, setAllTimeframeData] = useState<Record<string, CandlestickData[]>>({});
+
+    const priceFetchCache = React.useRef<Map<string, Promise<number | null>>>(new Map());
+
+    const fetchPriceFromBinance = useCallback(async (ticker: string, datetime: string, timeframe: string): Promise<number | null> => {
+        try {
+            const targetTime = new Date(datetime.replace(' ', 'T') + 'Z').getTime();
+            
+            // Fetch a small range of candles around the target time
+            const { data, error } = await supabase
+                .from('kline_data')
+                .select('open, time')
+                .eq('symbol', ticker)
+                .eq('timeframe', timeframe)
+                .gte('time', new Date(targetTime - 5 * 60 * 1000).toISOString())
+                .lte('time', new Date(targetTime + 5 * 60 * 1000).toISOString())
+                .limit(10);
+
+            if (!error && data && data.length > 0) {
+                let closest = data[0];
+                let minDiff = Math.abs(new Date(data[0].time).getTime() - targetTime);
+                
+                for (const candle of data) {
+                    const diff = Math.abs(new Date(candle.time).getTime() - targetTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = candle;
+                    }
+                }
+                
+                if (closest.open) return closest.open;
+            }
+
+            // If not in database, fetch from Binance API
+            console.log(`[Binance Fetch] Fetching price for ${ticker} ${timeframe} at ${datetime}`);
+            
+            const response = await fetch(
+                `https://api.binance.com/api/v3/klines?symbol=${ticker}&interval=${timeframe}&startTime=${targetTime - 60000}&endTime=${targetTime + 60000}&limit=5`
+            );
+            
+            if (!response.ok) {
+                console.error('[Binance Fetch] API error:', response.status);
+                return null;
+            }
+            
+            const klines = await response.json();
+            
+            if (!klines || klines.length === 0) {
+                console.log('[Binance Fetch] No data returned');
+                return null;
+            }
+            
+            let closestKline = klines[0];
+            let minTimeDiff = Math.abs(klines[0][0] - targetTime);
+            
+            for (const kline of klines) {
+                const timeDiff = Math.abs(kline[0] - targetTime);
+                if (timeDiff < minTimeDiff) {
+                    minTimeDiff = timeDiff;
+                    closestKline = kline;
+                }
+            }
+            
+            const openPrice = parseFloat(closestKline[1]);
+            console.log(`[Binance Fetch] Found price: ${openPrice}`);
+            
+            return openPrice;
+            
+        } catch (error) {
+            console.error('[Binance Fetch] Error:', error);
+            return null;
+        }
+    }, []);
+
+    const getCachedPriceFetch = useCallback(async (ticker: string, datetime: string, timeframe: string): Promise<number | null> => {
+        const cacheKey = `${ticker}-${datetime}-${timeframe}`;
+        
+        if (priceFetchCache.current.has(cacheKey)) {
+            return priceFetchCache.current.get(cacheKey)!;
+        }
+        
+        const fetchPromise = fetchPriceFromBinance(ticker, datetime, timeframe);
+        priceFetchCache.current.set(cacheKey, fetchPromise);
+        
+        fetchPromise.then(result => {
+            priceFetchCache.current.set(cacheKey, Promise.resolve(result));
+        }).catch(() => {
+            priceFetchCache.current.delete(cacheKey);
+        });
+        
+        return fetchPromise;
+    }, [fetchPriceFromBinance]);
+
     const handleQuadViewTickersChange = useCallback((tickers: CryptoSymbol[]) => {
         setQuadViewTickers(tickers);
     }, []);
@@ -166,13 +256,32 @@ const Dashboard: React.FC = () => {
     }, [userSelectedTimeframes, currentSymbol, showHistoricalPerformance]);
 
     useEffect(() => {
-    const fetchCandlestickData = async () => {
-        const data = await fetchKlineData(getHighestFrequencyTimeframe, currentSymbol, 0);
-        setCandlestickData(data);
-    };
-    
-    fetchCandlestickData();
-    }, [currentSymbol, getHighestFrequencyTimeframe]);
+        const fetchCandlestickData = async () => {
+            setIsLoadingData(true);
+            try {
+                const data = await fetchKlineData(getHighestFrequencyTimeframe, currentSymbol, 0);
+                setCandlestickData(data);
+                
+                // Fetch data for all timeframes to enable price lookups
+                const allData: Record<string, CandlestickData[]> = {};
+                for (const timeframe of userSelectedTimeframes) {
+                    try {
+                        const tfData = await fetchKlineData(timeframe, currentSymbol, 0);
+                        allData[timeframe.id] = tfData;
+                    } catch (error) {
+                        console.error(`Error fetching data for ${timeframe.id}:`, error);
+                    }
+                }
+                setAllTimeframeData(allData);
+            } catch (error) {
+                console.error('Error fetching candlestick data:', error);
+            } finally {
+                setIsLoadingData(false);
+            }
+        };
+        
+        fetchCandlestickData();
+    }, [currentSymbol, getHighestFrequencyTimeframe, userSelectedTimeframes]);
 
     const handleTimeframeUpdate = (updatedTimeframe: TimeframeConfig) => {
         setUserSelectedTimeframes(prevTimeframes =>
@@ -254,37 +363,117 @@ const Dashboard: React.FC = () => {
 
         return { displayInitialIndicators: filteredInits, displayPropagations: filteredProps };
     }, [initialIndicators, propagations, selectedTimeframes, selectedPropagationLevel, activeStartDate, activeEndDate]);
-    // Helper to calculate percentage change between Start of Chain and Current Propagation
-    const calculateDirectionalChange = useCallback((prop: Propagation, fullInitialList: InitialIndicator[]) => {
-        try {
-            // Extract index from "Chain_1", "Chain_2" etc.
-            const parts = prop.propagation_id.split('_');
-            if (parts.length < 2) return null;
-            
-            const index = parseInt(parts[1], 10) - 1;
-            const startNode = fullInitialList[index];
-
-            if (!startNode || !startNode.open_price || startNode.open_price === 0) return null;
-
-            const change = ((prop.open_price - startNode.open_price) / startNode.open_price) * 100;
-            return change;
-        } catch (e) {
-            return null;
+    const calculateDirectionalChange = useCallback(async (prop: Propagation, fullInitialList: InitialIndicator[]) => {
+    if (prop.directional_change_percent !== undefined && prop.directional_change_percent !== 0) {
+        return prop.directional_change_percent;
+    }
+    
+    try {
+        const parts = prop.propagation_id.split('_');
+        if (parts.length < 2) return null;
+        
+        const index = parseInt(parts[1], 10) - 1;
+        const startNode = fullInitialList[index];
+        if (!startNode) return null;
+        
+        let startPrice = startNode.open_price;
+        if (!startPrice || startPrice === 0) {
+            startPrice = await getCachedPriceFetch(currentSymbol, startNode.datetime, startNode.timeframe);
         }
-    }, []);
+        if (!startPrice || startPrice === 0) return null;
+        
+        let propPrice = prop.open_price;
+        if (!propPrice || propPrice === 0) {
+            propPrice = await getCachedPriceFetch(currentSymbol, prop.datetime, prop.lower_freq);
+        }
+        if (!propPrice || propPrice === 0) return null;
+
+        const change = ((propPrice - startPrice) / startPrice) * 100;
+        return change;
+    } catch (e) {
+        console.error('Error calculating directional change:', e);
+        return null;
+    }
+}, [currentSymbol, getCachedPriceFetch]);
+    const PropagationRow: React.FC<{
+        prop: Propagation;
+        initialIndicators: InitialIndicator[];
+        calculateDirectionalChange: (prop: Propagation, initialIndicators: InitialIndicator[]) => Promise<number | null>;
+        candlestickData: CandlestickData[];
+        allTimeframeData: Record<string, CandlestickData[]>;
+        currentSymbol: string;
+        getCachedPriceFetch: (ticker: string, datetime: string, timeframe: string) => Promise<number | null>;
+    }> = ({ prop, initialIndicators, calculateDirectionalChange, candlestickData, allTimeframeData, currentSymbol, getCachedPriceFetch }) => {
+        const [dirChange, setDirChange] = React.useState<number | null>(null);
+        const [isCalculating, setIsCalculating] = React.useState(true);
+
+        React.useEffect(() => {
+            const calculate = async () => {
+                setIsCalculating(true);
+                const change = await calculateDirectionalChange(prop, initialIndicators);
+                setDirChange(change);
+                setIsCalculating(false);
+            };
+            calculate();
+        }, [prop, initialIndicators, calculateDirectionalChange]);
+
+        return (
+            <tr className="hover:bg-[#252525]">
+                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.propagation_id}</td>
+                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.propagation_level}</td>
+                <td className="border border-[#3a3a3a] px-2 py-1 font-mono text-white">{prop.datetime}</td>
+                <td className="border border-[#3a3a3a] px-2 py-1">
+                    <span className={prop.trend_type > 0 ? 'text-green-500' : 'text-red-500'}>
+                        {prop.trend_type > 0 ? '↑' : '↓'} {prop.trend_type}
+                    </span>
+                </td>
+                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.higher_freq}</td>
+                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.lower_freq}</td>
+                <td className="border border-[#3a3a3a] px-2 py-1 text-white">
+                    <PriceCell 
+                        price={prop.open_price} 
+                        datetime={prop.datetime}
+                        timeframe={prop.lower_freq}
+                        candlestickData={candlestickData}
+                        allTimeframeData={allTimeframeData}
+                        ticker={currentSymbol}
+                        getCachedPriceFetch={getCachedPriceFetch}
+                    />
+                </td>
+                <td className="border border-[#3a3a3a] px-2 py-1 font-mono">
+                    {isCalculating ? (
+                        <span className="text-yellow-400 text-xs">...</span>
+                    ) : dirChange !== null ? (
+                        <span className={dirChange >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {dirChange > 0 ? '+' : ''}{dirChange.toFixed(2)}%
+                        </span>
+                    ) : (
+                        <span className="text-[#666]">-</span>
+                    )}
+                </td>
+            </tr>
+        );
+    };
+
     return (
         <div className="h-screen flex flex-col bg-[#1a1a1a]">
-            {/* Header */}
-            <div className="flex items-center justify-between bg-[#1a1a1a] border-b border-[#2a2a2a] px-2 py-0.5 md:px-4 md:py-1">
-                <div className="flex items-center space-x-2">
-                    <button onClick={() => setShowInfoModal(true)} className="flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium bg-[#2a2a2a] text-[#999] hover:bg-[#3a3a3a] hover:text-white transition-colors">
-                        <Info size={12} /><span>Info</span>
-                    </button>
-                </div>
-                <div className="flex items-center space-x-4">
-                    <div className="text-[#999] text-xs font-medium">{currentSymbol}</div>
-                </div>
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#1a1a1a] border-b border-[#2a2a2a] px-2 py-0.5 md:px-4 md:py-1">
+            <div className="flex items-center space-x-2">
+                <button onClick={() => setShowInfoModal(true)} className="flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium bg-[#2a2a2a] text-[#999] hover:bg-[#3a3a3a] hover:text-white transition-colors">
+                    <Info size={12} /><span>Info</span>
+                </button>
+                {isLoadingData && (
+                    <div className="flex items-center space-x-1 text-xs text-blue-400">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-400"></div>
+                        <span>Loading...</span>
+                    </div>
+                )}
             </div>
+            <div className="flex items-center space-x-4">
+                <div className="text-[#999] text-xs font-medium">{currentSymbol}</div>
+            </div>
+        </div>
 
             {/* Info Modal */}
             {showInfoModal && (
@@ -430,7 +619,15 @@ Our technology operates on the assumption that all directional changes start fro
                                                             <td className="border border-[#3a3a3a] px-2 py-1"><span className={ind.trend_type > 0 ? 'text-green-500' : 'text-red-500'}>{ind.trend_type > 0 ? '↑' : '↓'} {ind.trend_type}</span></td>
                                                             <td className="border border-[#3a3a3a] px-2 py-1 text-white">{ind.timeframe}</td>
                                                             <td className="border border-[#3a3a3a] px-2 py-1 text-white">
-                                                                <PriceCell price={ind.open_price} />
+                                                                <PriceCell 
+                                                                    price={ind.open_price} 
+                                                                    datetime={ind.datetime}
+                                                                    timeframe={ind.timeframe}
+                                                                    candlestickData={candlestickData}
+                                                                    allTimeframeData={allTimeframeData}
+                                                                    ticker={currentSymbol}
+                                                                    getCachedPriceFetch={getCachedPriceFetch}
+                                                                />
                                                             </td>
                                                         </tr>
                                                     ))
@@ -473,31 +670,17 @@ Our technology operates on the assumption that all directional changes start fro
                                                 displayPropagations
                                                     .slice((propagationsPage - 1) * itemsPerPage, propagationsPage * itemsPerPage)
                                                     .map((prop, idx) => {
-                                                        // Calculate change using the FULL initialIndicators list (to ensure we find the start even if filtered out of view)
-                                                        const dirChange = calculateDirectionalChange(prop, initialIndicators);
-                                                        
                                                         return (
-                                                            <tr key={idx} className="hover:bg-[#252525]">
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.propagation_id}</td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.propagation_level}</td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 font-mono text-white">{prop.datetime}</td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1"><span className={prop.trend_type > 0 ? 'text-green-500' : 'text-red-500'}>{prop.trend_type > 0 ? '↑' : '↓'} {prop.trend_type}</span></td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.higher_freq}</td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 text-white">{prop.lower_freq}</td>
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 text-white">
-                                                                    <PriceCell price={prop.open_price} />
-                                                                </td>
-                                                                                                                                {/* New Column Cell */}
-                                                                <td className="border border-[#3a3a3a] px-2 py-1 font-mono">
-                                                                    {dirChange !== null ? (
-                                                                        <span className={dirChange >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                                                            {dirChange > 0 ? '+' : ''}{dirChange.toFixed(2)}%
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-[#666]">-</span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
+                                                            <PropagationRow 
+                                                                key={idx} 
+                                                                prop={prop} 
+                                                                initialIndicators={initialIndicators}
+                                                                calculateDirectionalChange={calculateDirectionalChange}
+                                                                candlestickData={candlestickData}
+                                                                allTimeframeData={allTimeframeData}
+                                                                currentSymbol={currentSymbol}
+                                                                getCachedPriceFetch={getCachedPriceFetch}
+                                                            />
                                                         );
                                                     })
                                             ) : (
@@ -513,6 +696,104 @@ Our technology operates on the assumption that all directional changes start fro
             </div>
         </div>
     );
+};
+
+const PriceCell: React.FC<{
+    price: number;
+    datetime?: string;
+    timeframe?: string;
+    candlestickData?: CandlestickData[];
+    allTimeframeData?: Record<string, CandlestickData[]>;
+    ticker?: string;
+    getCachedPriceFetch: (ticker: string, datetime: string, timeframe: string) => Promise<number | null>;
+}> = ({ price, datetime, timeframe, candlestickData, allTimeframeData, ticker = 'BTCUSDT', getCachedPriceFetch }) => {
+    const [displayPrice, setDisplayPrice] = React.useState<number | null>(null);
+    const [isFetching, setIsFetching] = React.useState(false);
+
+    React.useEffect(() => {
+        const findPrice = async () => {
+            // First: Use the provided price if it's valid
+            if (price && price !== 0) {
+                setDisplayPrice(price);
+                return;
+            }
+            
+            // Second: Check local candlestick data for this specific timeframe
+            if (datetime && timeframe && allTimeframeData && allTimeframeData[timeframe]) {
+                const targetTime = new Date(datetime.replace(' ', 'T') + 'Z').getTime() / 1000;
+                const timeframeData = allTimeframeData[timeframe];
+                
+                // Find exact match
+                const exactMatch = timeframeData.find(candle => candle.time === targetTime);
+                if (exactMatch && exactMatch.open) {
+                    setDisplayPrice(exactMatch.open);
+                    return;
+                }
+                
+                // Find closest candle within tolerance
+                const timeframeMinutes = convertIntervalToMinutes(timeframe);
+                const tolerance = Math.max(5 * 60, timeframeMinutes * 60);
+                const closest = timeframeData.find(candle => 
+                    Math.abs(candle.time - targetTime) < tolerance && candle.open > 0
+                );
+                
+                if (closest && closest.open) {
+                    setDisplayPrice(closest.open);
+                    return;
+                }
+            }
+            
+            // Third: Check highest frequency candlestick data as fallback
+            if (datetime && candlestickData && candlestickData.length > 0) {
+                const targetTime = new Date(datetime.replace(' ', 'T') + 'Z').getTime() / 1000;
+                
+                const exactMatch = candlestickData.find(candle => candle.time === targetTime);
+                if (exactMatch && exactMatch.open) {
+                    setDisplayPrice(exactMatch.open);
+                    return;
+                }
+                
+                const fiveMinutes = 5 * 60;
+                const closest = candlestickData.find(candle => 
+                    Math.abs(candle.time - targetTime) < fiveMinutes && candle.open > 0
+                );
+                
+                if (closest && closest.open) {
+                    setDisplayPrice(closest.open);
+                    return;
+                }
+            }
+            
+            // Fourth: Fetch from database or Binance (using cache)
+            if (datetime && timeframe && ticker) {
+                setIsFetching(true);
+                try {
+                    const fetchedPrice = await getCachedPriceFetch(ticker, datetime, timeframe);
+                    if (fetchedPrice !== null && fetchedPrice !== 0) {
+                        setDisplayPrice(fetchedPrice);
+                        return;
+                    }
+                } finally {
+                    setIsFetching(false);
+                }
+            }
+            
+            // No price found
+            setDisplayPrice(null);
+        };
+
+        findPrice();
+    }, [price, datetime, timeframe, candlestickData, allTimeframeData, ticker]);
+
+    if (isFetching) {
+        return <span className="text-yellow-400 text-xs">...</span>;
+    }
+
+    if (displayPrice !== null && displayPrice !== 0) {
+        return <span>{displayPrice.toFixed(2)}</span>;
+    }
+    
+    return <span className="text-gray-500">N/A</span>;
 };
 
 export default Dashboard;
