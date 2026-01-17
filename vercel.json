@@ -5,4 +5,9 @@
       "destination": "/sumtyme_server/index.py"
     }
   ],
+  "functions": {
+    "sumtyme_server/*.py": {
+      "maxDuration": 10
+    }
+  }
 }
