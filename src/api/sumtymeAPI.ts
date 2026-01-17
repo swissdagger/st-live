@@ -8,7 +8,7 @@ import {
 import { getInitialTimeframes, fetchKlineData } from './binanceAPI';
 
 // FastAPI server URL - adjust as needed
-const SUMTYME_API_BASE_URL = import.meta.env.VITE_SUMTYME_API_URL;
+const SUMTYME_API_BASE_URL = "/api";
 
 // Define supported prediction intervals - expanded to include all timeframes
 export const SUPPORTED_PREDICTION_INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '1d'];

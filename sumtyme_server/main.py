@@ -19,7 +19,12 @@ except ImportError as e:
     print("Please install with: pip install sumtyme")
     SUMTYME_AVAILABLE = False
 
-app = FastAPI(title="Sumtyme API Wrapper", version="2.0.0")
+app = FastAPI(
+    title="Sumtyme API Wrapper", 
+    version="2.0.0",
+    docs_url="/api/docs",       # <--- ADD THIS
+    openapi_url="/api/openapi.json" # <--- ADD THIS
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -159,7 +164,7 @@ def validate_data_length(df: pd.DataFrame, min_length: int = 5001) -> pd.DataFra
     
     return df
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy", 
@@ -169,7 +174,7 @@ async def health_check():
         "api_version": "2.0.0"
     }
 
-@app.post("/forecast/ohlc", response_model=OHLCForecastResponse)
+@app.post("/api/forecast/ohlc", response_model=OHLCForecastResponse)
 async def forecast_ohlc(request: OHLCForecastRequest):
     """
     OHLC forecast endpoint using the new ohlc_forecast function.
@@ -254,7 +259,7 @@ async def forecast_ohlc(request: OHLCForecastRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"OHLC forecast failed: {str(e)}")
 
-@app.post("/forecast/univariate", response_model=UnivariateForecastResponse)
+@app.post("/api/forecast/univariate", response_model=UnivariateForecastResponse)
 async def forecast_univariate(request: UnivariateForecastRequest):
     """
     Univariate forecast endpoint using the new univariate_forecast function.
@@ -327,7 +332,7 @@ async def forecast_univariate(request: UnivariateForecastRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Univariate forecast failed: {str(e)}")
 
-@app.post("/analysis/propagation", response_model=PropagationCheckResponse)
+@app.post("/api/analysis/propagation", response_model=PropagationCheckResponse)
 async def check_propagation(request: PropagationCheckRequest):
     """
     Check if a causal chain has propagated from one timeframe to the next.
@@ -375,7 +380,7 @@ async def check_propagation(request: PropagationCheckRequest):
         raise HTTPException(status_code=500, detail=f"Propagation check failed: {str(e)}")
 
 # Legacy endpoint for backward compatibility
-@app.post("/predict/directional_change")
+@app.post("/api/predict/directional_change")
 async def predict_directional_change_legacy(request: OHLCForecastRequest):
     """
     Legacy endpoint - redirects to new ohlc_forecast endpoint.
@@ -400,7 +405,7 @@ async def predict_directional_change_legacy(request: OHLCForecastRequest):
         logger.error(f"Legacy endpoint failed: {e}")
         raise
 
-@app.post("/signup")
+@app.post("/api/signup")
 async def signup_user(request: SignupRequest):
     """
     User signup endpoint (if still supported by sumtyme).
