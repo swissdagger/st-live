@@ -5,13 +5,14 @@ import { getInitialTimeframes, startKlinePolling, calculateDataLimit, convertInt
 import { subscribeToPredictionUpdates, setSixteenTimesMode } from '../../services/predictionService';
 import { CryptoSymbol, TimeframeConfig, PredictionEntry, CandlestickData } from '../../types';
 import { SUPPORTED_PREDICTION_INTERVALS, addPollingTicker } from '../../api/sumtymeAPI';
-import { Info, X, Calendar, Search } from 'lucide-react';
+import { Info, X, Calendar, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { loadPredictionsForTicker } from '../../services/predictionService';
 import { extractTrendIndicators, Propagation, InitialIndicator, getCachedPrice } from '../../utils/indicatorAnalysis';
 import { MultiSelect } from '../common/MultiSelect';
 import { supabase } from '../../lib/supabase';
 
 
+// Helper to parse dates consistently
 // Helper to parse dates consistently
 const parseCustomDateTime = (dateStr: string): Date | null => {
     if (!dateStr || dateStr.trim() === '') return null;
@@ -22,6 +23,370 @@ const parseCustomDateTime = (dateStr: string): Date | null => {
     }
     const parsed = new Date(dateStr);
     return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// Info Modal Component
+const InfoModal: React.FC<{ 
+    onClose: () => void;
+    initialIndicators: InitialIndicator[];
+    propagations: Propagation[];
+}> = ({ onClose, initialIndicators, propagations }) => {
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const totalSlides = 4;
+    
+    // Analyze active chains
+    const chainAnalysis = useMemo(() => {
+        // Group propagations by chain ID
+        const chainGroups = new Map<string, Propagation[]>();
+        propagations.forEach(prop => {
+            if (!chainGroups.has(prop.propagation_id)) {
+                chainGroups.set(prop.propagation_id, []);
+            }
+            chainGroups.get(prop.propagation_id)!.push(prop);
+        });
+        
+        // Find active chains (those with recent activity in last 24 hours)
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        const activeChains = Array.from(chainGroups.entries()).map(([chainId, props]) => {
+            // Sort by propagation level
+            const sortedProps = [...props].sort((a, b) => a.propagation_level - b.propagation_level);
+            const maxLevel = Math.max(...sortedProps.map(p => p.propagation_level));
+            const latestProp = sortedProps[sortedProps.length - 1];
+            const latestTime = new Date(latestProp.datetime.replace(' ', 'T') + 'Z');
+            
+            // Find the initial indicator for this chain
+            const chainIndex = parseInt(chainId.split('_')[1], 10) - 1;
+            const initialIndicator = initialIndicators[chainIndex];
+            
+            return {
+                chainId,
+                direction: latestProp.trend_type > 0 ? 'UP' : 'DOWN',
+                maxLevel,
+                latestTimeframe: latestProp.lower_freq,
+                startTime: initialIndicator?.datetime || latestProp.datetime,
+                latestTime: latestProp.datetime,
+                isRecent: latestTime > oneDayAgo,
+                timeframes: sortedProps.map(p => p.lower_freq),
+                initialTimeframe: initialIndicator?.timeframe || sortedProps[0].higher_freq
+            };
+        }).filter(chain => chain.isRecent);
+        
+        return {
+            totalActive: activeChains.length,
+            upChains: activeChains.filter(c => c.direction === 'UP').length,
+            downChains: activeChains.filter(c => c.direction === 'DOWN').length,
+            chains: activeChains.sort((a, b) => b.maxLevel - a.maxLevel) // Sort by strongest chains first
+        };
+    }, [initialIndicators, propagations]);
+
+    const nextSlide = () => setCurrentSlide(prev => Math.min(prev + 1, totalSlides - 1));
+    const prevSlide = () => setCurrentSlide(prev => Math.max(prev - 1, 0));
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-[#2a2a2a]">
+                    <h2 className="text-white text-lg font-semibold">Understanding Causal Chains</h2>
+                    <button onClick={onClose}><X size={20} className="text-[#999] hover:text-white" /></button>
+                </div>
+
+                {/* Slide Indicators */}
+                <div className="flex justify-center gap-2 py-3 border-b border-[#2a2a2a]">
+                    {[0, 1, 2, 3].map(index => (
+                        <button
+                            key={index}
+                            onClick={() => setCurrentSlide(index)}
+                            className={`h-2 rounded-full transition-all ${
+                                currentSlide === index ? 'w-8 bg-blue-500' : 'w-2 bg-[#3a3a3a]'
+                            }`}
+                        />
+                    ))}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {currentSlide === 0 && (
+                        <div className="space-y-6">
+                            <div className="text-center mb-8">
+                                <h3 className="text-2xl font-bold text-white mb-2">Don't Predict the Price.</h3>
+                                <h3 className="text-2xl font-bold text-blue-400">Track the Momentum.</h3>
+                            </div>
+
+                            <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
+                                <p className="text-[#ccc] leading-relaxed">
+                                    Most indicators try to guess where the price will be in 1 hour. <span className="text-white font-semibold">We don't.</span>
+                                </p>
+                                <p className="text-[#ccc] leading-relaxed">
+                                    Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> across timeframes (Propagation).
+                                </p>
+                                <div className="bg-[#1a1a1a] p-4 rounded border border-[#3a3a3a] mt-4">
+                                    <p className="text-white italic">
+                                        💡 Think of it like a <span className="text-blue-400">snowball rolling down a hill</span>—it starts small, but as it keeps rolling, it gains size and momentum.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-4 bg-[#2a2a2a] p-4 rounded-lg">
+                                <div className="flex-shrink-0 w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                                    ✓
+                                </div>
+                                <div>
+                                    <h4 className="text-white font-semibold mb-1">Key Takeaway</h4>
+                                    <p className="text-[#ccc]">We track the <span className="text-blue-400 font-semibold">chain of events</span>, not just a single moment in time.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentSlide === 1 && (
+                        <div className="space-y-6">
+                            <div className="text-center mb-6">
+                                <h3 className="text-2xl font-bold text-white mb-2">The Chain Reaction</h3>
+                                <p className="text-[#999]">How momentum spreads from small to large timeframes</p>
+                            </div>
+
+                            <p className="text-[#ccc] leading-relaxed">
+                                Market moves often start on <span className="text-green-400 font-semibold">small timeframes</span> before they affect the larger trend. We call this a <span className="text-blue-400 font-semibold">Causal Chain</span>.
+                            </p>
+
+                            {/* Domino Effect Visual */}
+                            <div className="bg-[#2a2a2a] p-6 rounded-lg">
+                                <div className="flex items-center justify-center gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="w-12 h-16 bg-green-500 rounded mb-2 transform -rotate-12 opacity-50"></div>
+                                        <span className="text-xs text-white font-mono">1m</span>
+                                    </div>
+                                    <div className="text-green-400 text-2xl">→</div>
+                                    <div className="text-center">
+                                        <div className="w-16 h-20 bg-green-500 rounded mb-2 transform -rotate-6"></div>
+                                        <span className="text-xs text-white font-mono">3m</span>
+                                    </div>
+                                    <div className="text-green-400 text-2xl">→</div>
+                                    <div className="text-center">
+                                        <div className="w-20 h-24 bg-green-500 rounded mb-2"></div>
+                                        <span className="text-xs text-white font-mono">5m</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Three Stages */}
+                            <div className="space-y-4">
+                                <div className="flex items-start gap-3 bg-[#2a2a2a] p-4 rounded-lg">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">1</div>
+                                    <div>
+                                        <h4 className="text-white font-semibold mb-1">The Spark (Initiation)</h4>
+                                        <p className="text-[#ccc] text-sm">We detect a signal on the smallest timeframe (e.g., <span className="font-mono text-green-400">1m</span>). The first domino has fallen. <span className="text-green-400">● Your first dot appears.</span></p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-3 bg-[#2a2a2a] p-4 rounded-lg">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">2</div>
+                                    <div>
+                                        <h4 className="text-white font-semibold mb-1">The Spread (Propagation)</h4>
+                                        <p className="text-[#ccc] text-sm">If the momentum is real, that <span className="font-mono text-green-400">1m</span> signal will trigger a <span className="font-mono text-blue-400">3m</span> signal, then a <span className="font-mono text-blue-400">5m</span> signal. <span className="text-blue-400">● More dots appear, connected by the same chain.</span></p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-3 bg-[#2a2a2a] p-4 rounded-lg">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold">3</div>
+                                    <div>
+                                        <h4 className="text-white font-semibold mb-1">The Trend</h4>
+                                        <p className="text-[#ccc] text-sm">As long as the chain is propagating to larger timeframes, the directional move is <span className="text-green-400 font-semibold">healthy and growing</span>. The longer the chain, the stronger the momentum.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentSlide === 2 && (
+                        <div className="space-y-6">
+                            <div className="text-center mb-6">
+                                <h3 className="text-2xl font-bold text-white mb-2">The Chain Breaks</h3>
+                                <p className="text-[#999]">When momentum ends</p>
+                            </div>
+
+                            <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
+                                <p className="text-[#ccc] leading-relaxed">
+                                    A chain doesn't last forever. It ends when we detect an <span className="text-red-400 font-semibold">Opposing Signal</span>.
+                                </p>
+                                <div className="bg-[#1a1a1a] p-4 rounded border border-red-900">
+                                    <p className="text-[#ccc]">
+                                        If you are tracking an <span className="text-green-400 font-semibold">UP chain</span>, and a <span className="text-red-400 font-semibold">DOWN signal</span> appears on the current timeframe, the momentum is broken. This is <span className="text-red-400 font-semibold">Termination</span>. The chain is closed, and the trade opportunity is over.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Summary Table */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm border-collapse">
+                                    <thead>
+                                        <tr className="bg-[#2a2a2a]">
+                                            <th className="border border-[#3a3a3a] px-3 py-2 text-left text-white">Stage</th>
+                                            <th className="border border-[#3a3a3a] px-3 py-2 text-left text-white">Visual Indicator</th>
+                                            <th className="border border-[#3a3a3a] px-3 py-2 text-left text-white">Meaning</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="hover:bg-[#252525]">
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-green-400 font-semibold">Initiation</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2">
+                                                <span className="text-green-400">● First Dot (1m)</span>
+                                            </td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"Something is starting."</td>
+                                        </tr>
+                                        <tr className="hover:bg-[#252525]">
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-blue-400 font-semibold">Propagation</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2">
+                                                <span className="text-blue-400">● New Dots (3m, 5m)</span>
+                                            </td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is getting stronger."</td>
+                                        </tr>
+                                        <tr className="hover:bg-[#252525]">
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-red-400 font-semibold">Termination</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2">
+                                                <span className="text-red-400">● Opposing Dot</span>
+                                            </td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is over. Exit now."</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentSlide === 3 && (
+                        <div className="space-y-6">
+                            <div className="text-center mb-6">
+                                <h3 className="text-2xl font-bold text-white mb-2">Live Chain Status</h3>
+                                <p className="text-[#999]">What's happening right now</p>
+                            </div>
+
+                            {/* Summary Stats */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-[#2a2a2a] p-4 rounded-lg text-center">
+                                    <div className="text-3xl font-bold text-blue-400">{chainAnalysis.totalActive}</div>
+                                    <div className="text-xs text-[#999] mt-1">Active Chains</div>
+                                </div>
+                                <div className="bg-[#2a2a2a] p-4 rounded-lg text-center">
+                                    <div className="text-3xl font-bold text-green-400">{chainAnalysis.upChains}</div>
+                                    <div className="text-xs text-[#999] mt-1">Upward</div>
+                                </div>
+                                <div className="bg-[#2a2a2a] p-4 rounded-lg text-center">
+                                    <div className="text-3xl font-bold text-red-400">{chainAnalysis.downChains}</div>
+                                    <div className="text-xs text-[#999] mt-1">Downward</div>
+                                </div>
+                            </div>
+
+                            {chainAnalysis.totalActive > 0 ? (
+                                <>
+                                    <div className="bg-[#2a2a2a] p-4 rounded-lg">
+                                        <h4 className="text-white font-semibold mb-3">Current Chains (Last 24 Hours)</h4>
+                                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                                            {chainAnalysis.chains.map((chain, idx) => (
+                                                <div key={chain.chainId} className="bg-[#1a1a1a] p-3 rounded border border-[#3a3a3a]">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-xs text-[#999]">{chain.chainId}</span>
+                                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                                                chain.direction === 'UP' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'
+                                                            }`}>
+                                                                {chain.direction === 'UP' ? '↑ UP' : '↓ DOWN'}
+                                                            </span>
+                                                        </div>
+                                                        <span className={`text-xs font-semibold ${
+                                                            chain.maxLevel >= 3 ? 'text-purple-400' : chain.maxLevel >= 2 ? 'text-blue-400' : 'text-green-400'
+                                                        }`}>
+                                                            Level {chain.maxLevel}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-[#999]">
+                                                        <span className="font-mono">{chain.initialTimeframe}</span>
+                                                        {chain.timeframes.map((tf, i) => (
+                                                            <React.Fragment key={i}>
+                                                                <span className="text-blue-400">→</span>
+                                                                <span className="font-mono text-blue-400">{tf}</span>
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
+                                                    <div className="text-xs text-[#666] mt-2">
+                                                        Started: {chain.startTime} • Latest: {chain.latestTime}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-blue-900/20 border border-blue-900 p-4 rounded-lg">
+                                        <p className="text-sm text-blue-300">
+                                            💡 <strong>Tip:</strong> Chains with higher propagation levels (Level 3+) indicate stronger, more sustained momentum across multiple timeframes.
+                                        </p>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="bg-[#2a2a2a] p-8 rounded-lg text-center">
+                                    <div className="text-4xl mb-3">🔍</div>
+                                    <p className="text-white font-semibold mb-2">No Active Chains Detected</p>
+                                    <p className="text-[#999] text-sm">
+                                        When a new directional signal appears on the shortest timeframe (1m), it will show here as an active chain. Check back soon!
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Additional Info */}
+                            <div className="bg-[#2a2a2a] p-4 rounded-lg space-y-3 border-t-2 border-[#3a3a3a] mt-6">
+                                <h4 className="text-white font-semibold">About This Demo</h4>
+                                <p className="text-[#ccc] text-sm">
+                                    This deployment tracks BTCUSDT across <span className="font-mono text-blue-400">1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, and 1d</span> timeframes.
+                                </p>
+                                <p className="text-[#999] text-xs">
+                                    Live data from api.binance.com starting January 13, 2026 20:30:00 GMT
+                                </p>
+                                <p className="text-[#ccc] text-sm">
+                                    Visit <a href="https://www.sumtyme.ai" className="text-blue-400 underline hover:text-blue-300">sumtyme.ai</a> to learn more and sign up for free API credits.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Navigation */}
+                <div className="flex items-center justify-between p-4 border-t border-[#2a2a2a]">
+                    <button
+                        onClick={prevSlide}
+                        disabled={currentSlide === 0}
+                        className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <ChevronLeft size={16} />
+                        Previous
+                    </button>
+                    
+                    <span className="text-[#999] text-sm">
+                        {currentSlide + 1} / {totalSlides}
+                    </span>
+
+                    {currentSlide < totalSlides - 1 ? (
+                        <button
+                            onClick={nextSlide}
+                            className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                        >
+                            Next
+                            <ChevronRight size={16} />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                        >
+                            Got it!
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 
@@ -502,31 +867,11 @@ useEffect(() => {
 
             {/* Info Modal */}
             {showInfoModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg max-w-6xl w-full max-h-[80vh] overflow-y-auto">
-                        <div className="flex items-center justify-between p-4 border-b border-[#2a2a2a]">
-                            <h2 className="text-white text-lg font-semibold">Market Structure Visualisation Tool</h2>
-                            <button onClick={() => setShowInfoModal(false)}><X size={20} className="text-[#999] hover:text-white" /></button>
-                        </div>
-                        <div className="p-6 space-y-4 text-[#ccc] leading-relaxed">
-                            <p className="text-white font-medium">
-                                This shows sumtyme.ai's real-time analysis of BTCUSDT's market structure.
-                            </p>
-                            <p className="text-white font-small">
-Our technology operates on the assumption that all directional changes start from the shortest observable timescale and propagate to longer timescales as it continues.</p>
-<p className="text-white font-small">For this live demonstration, we have selected the following timescales to illustrate how non-linear change can be tracked in real time with our technology.</p>
-<p className='text-white font-small'>1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, and 1d.</p>
-<p className="text-white text-sm">Note that we are not using the shortest observable timescales for simplicity.</p>
-<p className='text-white font-small'>
-  Visit <a className="text-white font-small underline" href="https://www.sumtyme.ai">our website</a> to learn more about our approach and sign up for free API credits.</p>
-                            <div className="pt-4 border-t border-[#2a2a2a]">
-                                <p className="text-sm">
-                                    This deployment displays live market data from api.binance.com starting from <strong>January 13, 2026 20:30:00 GMT.</strong>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <InfoModal 
+                    onClose={() => setShowInfoModal(false)} 
+                    initialIndicators={initialIndicators}
+                    propagations={propagations}
+                />
             )}
 
             {/* Main Content */}
