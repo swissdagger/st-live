@@ -371,7 +371,7 @@ const InfoModal: React.FC<{
                                     Live data from api.binance.com starting January 13, 2026 20:30:00 GMT (maintenance Jan 14-17)
                                 </p>
                                 <p className="text-[#ccc] text-sm">
-                                    This live demonstration is just the tip of the iceberg. To learn more about the technology and build more powerful applications for yourself in any environment (like tracking directionality during overlapping chain periods), visit <a href="https://www.sumtyme.ai" className="text-white-500 underline hover:text-blue-300">our website</a> to learn more and sign up for free API credits.
+                                    This live demonstration is just the tip of the iceberg. To learn more about the technology and build more powerful applications for yourself (like tracking directionality during overlapping chain periods) <strong>in any environment,</strong> visit <a href="https://www.sumtyme.ai" className="text-white-500 underline hover:text-blue-300">our website</a> to learn more and sign up for free API credits.
                                 </p>
                             </div>
                         </div>
