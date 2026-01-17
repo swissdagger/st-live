@@ -146,11 +146,11 @@ const InfoModal: React.FC<{
                                     Statistical models try to guess where the price will be in 1 hour. <span className="text-white font-semibold">Our technology doesn't.</span>
                                 </p>
                                 <p className="text-[#ccc] leading-relaxed">
-                                    Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> using different timescales.
+                                    Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> and tracks it as it <span className="text-green-400">grows stronger</span> using different timescales.
                                 </p>
                                 <div className="bg-[#1a1a1a] p-4 rounded border border-[#3a3a3a] mt-4">
                                     <p className="text-white italic">
-                                        💡 Think of it like a <span className="text-blue-400">snowball rolling down a hill</span>—it starts small, but as it keeps rolling, it gains size and momentum.
+                                        💡 Think of it like a <span className="text-blue-400">snowball rolling down a hill</span> - it starts small, but as it keeps rolling, it gains size and momentum.
                                     </p>
                                 </div>
                             </div>
@@ -161,7 +161,7 @@ const InfoModal: React.FC<{
                                 </div>
                                 <div>
                                     <h4 className="text-white font-semibold mb-1">Key Takeaway</h4>
-                                    <p className="text-[#ccc]">We track the <span className="text-blue-400 font-semibold">causal chain of events</span>, not just a single moment in time.</p>
+                                    <p className="text-[#ccc]">We track the <span className="text-blue-400 font-semibold">causal chain of events of a directional move</span> - we don't forecast for a fixed period.</p>
                                 </div>
                             </div>
                         </div>
@@ -212,7 +212,7 @@ const InfoModal: React.FC<{
                                     <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">2</div>
                                     <div>
                                         <h4 className="text-white font-semibold mb-1">The Spread (Propagation)</h4>
-                                        <p className="text-[#ccc] text-sm">If that directional change is growing into a sustained, prolonged change, that <span className="font-mono text-green-400">1m</span> signal will trigger a matching signal on lower timeframes. In this example, that would be a green dot on the <span className="font-mono text-blue-400">3m</span> timescale, then a green dot on the <span className="font-mono text-blue-400">5m</span> 5m timescale. <span className="text-blue-400">● Aligning dots appear, connected by the same chain.</span> Crucially, whenever we see a dot on one timescale, we then immediately move to the next longest one for the chain we're tracking.</p>
+                                        <p className="text-[#ccc] text-sm">If that directional change is growing into a sustained, prolonged change, that <span className="font-mono text-green-400">1m</span> signal will trigger a matching signal on lower timeframes. In this example, that would be a green dot on the <span className="font-mono text-blue-400">3m</span> timescale, then a green dot on the <span className="font-mono text-blue-400">5m</span> 5m timescale. <span className="text-blue-400">● Aligning dots appear, connected by the same chain.</span> Crucially, whenever we see a dot on one timescale, we then move to the next longest one for the chain we're tracking.</p>
                                     </div>
                                 </div>
 
@@ -268,14 +268,14 @@ const InfoModal: React.FC<{
                                             <td className="border border-[#3a3a3a] px-3 py-2">
                                                 <span className="text-blue-400">● New Dots (3m, 5m)</span>
                                             </td>
-                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is continuing."</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The chain is continuing."</td>
                                         </tr>
                                         <tr className="hover:bg-[#252525]">
                                             <td className="border border-[#3a3a3a] px-3 py-2 text-red-400 font-semibold">Termination</td>
                                             <td className="border border-[#3a3a3a] px-3 py-2">
                                                 <span className="text-red-400">● Opposing Dot (on the max timescale reached)</span>
                                             </td>
-                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is over."</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The chain is over."</td>
                                         </tr>
                                     </tbody>
                                 </table>
