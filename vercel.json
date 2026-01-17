@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/sumtyme-server/index.py"
+      "destination": "/sumtyme_server/index.py"
     }
   ],
   "functions": {
