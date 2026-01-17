@@ -13,7 +13,6 @@ import { supabase } from '../../lib/supabase';
 
 
 // Helper to parse dates consistently
-// Helper to parse dates consistently
 const parseCustomDateTime = (dateStr: string): Date | null => {
     if (!dateStr || dateStr.trim() === '') return null;
     const match = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/);
@@ -38,16 +37,23 @@ const InfoModal: React.FC<{
     const chainAnalysis = useMemo(() => {
         // Group propagations by chain ID
         const chainGroups = new Map<string, Propagation[]>();
+        let maxTime = 0;
+
         propagations.forEach(prop => {
             if (!chainGroups.has(prop.propagation_id)) {
                 chainGroups.set(prop.propagation_id, []);
             }
             chainGroups.get(prop.propagation_id)!.push(prop);
+
+            // Track the latest time across all data to determine "current" context
+            const propTime = new Date(prop.datetime.replace(' ', 'T') + 'Z').getTime();
+            if (propTime > maxTime) maxTime = propTime;
         });
-        
-        // Find active chains (those with recent activity in last 24 hours)
-        const now = new Date();
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        // If no data, use current time, otherwise use the latest data point as "Now"
+        // This ensures historical data playback shows active chains relative to that history
+        const latestDataDate = maxTime > 0 ? new Date(maxTime) : new Date();
+        const oneDayAgo = new Date(latestDataDate.getTime() - 24 * 60 * 60 * 1000);
         
         const activeChains = Array.from(chainGroups.entries()).map(([chainId, props]) => {
             // Sort by propagation level
@@ -57,6 +63,8 @@ const InfoModal: React.FC<{
             const latestTime = new Date(latestProp.datetime.replace(' ', 'T') + 'Z');
             
             // Find the initial indicator for this chain
+            // Note: This index logic relies on extractTrendIndicators creating IDs as Chain_1, Chain_2...
+            // corresponding to initialIndicators[0], initialIndicators[1]...
             const chainIndex = parseInt(chainId.split('_')[1], 10) - 1;
             const initialIndicator = initialIndicators[chainIndex];
             
@@ -67,7 +75,9 @@ const InfoModal: React.FC<{
                 latestTimeframe: latestProp.lower_freq,
                 startTime: initialIndicator?.datetime || latestProp.datetime,
                 latestTime: latestProp.datetime,
-                isRecent: latestTime > oneDayAgo,
+                latestTimestamp: latestTime.getTime(),
+                // A chain is "Recent" if its latest propagation is within 24h of the dataset's latest point
+                isRecent: latestTime >= oneDayAgo,
                 timeframes: sortedProps.map(p => p.lower_freq),
                 initialTimeframe: initialIndicator?.timeframe || sortedProps[0].higher_freq
             };
@@ -77,7 +87,11 @@ const InfoModal: React.FC<{
             totalActive: activeChains.length,
             upChains: activeChains.filter(c => c.direction === 'UP').length,
             downChains: activeChains.filter(c => c.direction === 'DOWN').length,
-            chains: activeChains.sort((a, b) => b.maxLevel - a.maxLevel) // Sort by strongest chains first
+            chains: activeChains.sort((a, b) => {
+                // Sort by Level (Desc), then by Recency (Desc)
+                if (b.maxLevel !== a.maxLevel) return b.maxLevel - a.maxLevel;
+                return b.latestTimestamp - a.latestTimestamp;
+            })
         };
     }, [initialIndicators, propagations]);
 
@@ -112,7 +126,7 @@ const InfoModal: React.FC<{
                         <div className="space-y-6">
                             <div className="text-center mb-8">
                                 <h3 className="text-2xl font-bold text-white mb-2">Don't Predict the Price.</h3>
-                                <h3 className="text-2xl font-bold text-blue-400">Track the Momentum.</h3>
+                                <h3 className="text-2xl font-bold text-blue-400">Track Directional Changes Live.</h3>
                             </div>
 
                             <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
@@ -283,7 +297,7 @@ const InfoModal: React.FC<{
                             {chainAnalysis.totalActive > 0 ? (
                                 <>
                                     <div className="bg-[#2a2a2a] p-4 rounded-lg">
-                                        <h4 className="text-white font-semibold mb-3">Current Chains (Last 24 Hours)</h4>
+                                        <h4 className="text-white font-semibold mb-3">Current Chains (In Dataset)</h4>
                                         <div className="space-y-3 max-h-64 overflow-y-auto">
                                             {chainAnalysis.chains.map((chain, idx) => (
                                                 <div key={chain.chainId} className="bg-[#1a1a1a] p-3 rounded border border-[#3a3a3a]">
