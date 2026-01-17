@@ -6,7 +6,7 @@
     }
   ],
   "functions": {
-    "sumtyme-server/*.py": {
+    "sumtyme_server/*.py": {
       "runtime": "python3.9"
     }
   }
