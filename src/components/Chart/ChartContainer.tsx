@@ -270,20 +270,40 @@ const ChartContainer: React.FC<ChartContainerProps> = ({
         }
     }, [height, timeframe.color, isMobile, fixLeftEdge]);
 
-    useEffect(() => {
-        const initializeData = async () => {
-            const historyModeChanged = prevHistoryModeRef.current !== showHistoricalPerformance;
-            if (historyModeChanged) {
-                if (!isTransitioningRef.current) {
-                    isTransitioningRef.current = true;
-                    prevHistoryModeRef.current = showHistoricalPerformance;
-                    return;
-                }
-                isTransitioningRef.current = false;
+useEffect(() => {
+    const initializeData = async () => {
+        const historyModeChanged = prevHistoryModeRef.current !== showHistoricalPerformance;
+        if (historyModeChanged) {
+            if (!isTransitioningRef.current) {
+                isTransitioningRef.current = true;
+                prevHistoryModeRef.current = showHistoricalPerformance;
+                return;
             }
+            isTransitioningRef.current = false;
+        }
 
-            // Standard fetch only (no custom range fetching logic)
-            const historicalData = await fetchKlineData(timeframe, symbol, 0);
+        let historicalData: CandlestickData[];
+        
+        // Check if we have a custom date range
+        const hasDateRange = startDate || endDate;
+        
+        if (hasDateRange) {
+            // Parse dates
+            const start = startDate ? parseCustomDateTime(startDate) : new Date(Date.UTC(2026, 0, 13, 20, 30, 0));
+            const end = endDate ? parseCustomDateTime(endDate) : new Date();
+            
+            if (start && end) {
+                console.log(`[CHART] Fetching date range: ${start.toISOString()} to ${end.toISOString()}`);
+                // Fetch specific date range
+                historicalData = await fetchKlineDataForDateRange(timeframe, symbol, start, end);
+            } else {
+                // Fallback to standard fetch if date parsing fails
+                historicalData = await fetchKlineData(timeframe, symbol, 0);
+            }
+        } else {
+            // Standard fetch for current/recent data
+            historicalData = await fetchKlineData(timeframe, symbol, 0);
+        }
 
             if (seriesRef.current && historicalData.length > 0) {
                 // Apply local filtering to the standard data

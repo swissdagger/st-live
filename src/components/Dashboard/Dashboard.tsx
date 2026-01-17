@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import ChartContainer from '../Chart/ChartContainer';
 import QuadView from './QuadView';
-import { getInitialTimeframes, startKlinePolling, calculateDataLimit, convertIntervalToMinutes, fetchKlineData } from '../../api/binanceAPI';
+import { getInitialTimeframes, startKlinePolling, calculateDataLimit, convertIntervalToMinutes, fetchKlineData, fetchKlineDataForDateRange} from '../../api/binanceAPI';
 import { subscribeToPredictionUpdates, setSixteenTimesMode } from '../../services/predictionService';
 import { CryptoSymbol, TimeframeConfig, PredictionEntry, CandlestickData } from '../../types';
 import { SUPPORTED_PREDICTION_INTERVALS, addPollingTicker } from '../../api/sumtymeAPI';
@@ -255,12 +255,37 @@ const Dashboard: React.FC = () => {
         });
     }, [userSelectedTimeframes, currentSymbol, showHistoricalPerformance]);
 
-    useEffect(() => {
-        const fetchCandlestickData = async () => {
-            setIsLoadingData(true);
-            try {
-                const data = await fetchKlineData(getHighestFrequencyTimeframe, currentSymbol, 0);
-                setCandlestickData(data);
+useEffect(() => {
+    const fetchCandlestickData = async () => {
+        setIsLoadingData(true);
+        try {
+            let data: CandlestickData[];
+            
+            // Check if we have an active date range
+            if (activeStartDate || activeEndDate) {
+                const start = activeStartDate 
+                    ? parseCustomDateTime(activeStartDate) 
+                    : new Date(Date.UTC(2026, 0, 13, 20, 30, 0));
+                const end = activeEndDate 
+                    ? parseCustomDateTime(activeEndDate) 
+                    : new Date();
+                
+                if (start && end) {
+                    console.log(`[DASHBOARD] Fetching date range data for analysis`);
+                    data = await fetchKlineDataForDateRange(
+                        getHighestFrequencyTimeframe, 
+                        currentSymbol, 
+                        start, 
+                        end
+                    );
+                } else {
+                    data = await fetchKlineData(getHighestFrequencyTimeframe, currentSymbol, 0);
+                }
+            } else {
+                data = await fetchKlineData(getHighestFrequencyTimeframe, currentSymbol, 0);
+            }
+            
+            setCandlestickData(data);
                 
                 // Fetch data for all timeframes to enable price lookups
                 const allData: Record<string, CandlestickData[]> = {};
@@ -281,7 +306,7 @@ const Dashboard: React.FC = () => {
         };
         
         fetchCandlestickData();
-    }, [currentSymbol, getHighestFrequencyTimeframe, userSelectedTimeframes]);
+    }, [currentSymbol, getHighestFrequencyTimeframe, userSelectedTimeframes, activeStartDate, activeEndDate]);
 
     const handleTimeframeUpdate = (updatedTimeframe: TimeframeConfig) => {
         setUserSelectedTimeframes(prevTimeframes =>

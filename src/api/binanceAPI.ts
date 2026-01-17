@@ -531,6 +531,78 @@ export const subscribeToUpdates = (callback: UpdateCallback) => {
   };
 };
 
+// Add this new function to binanceAPI.ts
+export const fetchKlineDataForDateRange = async (
+  timeframe: TimeframeConfig,
+  symbol: CryptoSymbol,
+  startDate: Date,
+  endDate: Date
+): Promise<CandlestickData[]> => {
+  try {
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+    
+    console.log(`[DATE RANGE FETCH] Fetching ${symbol} ${timeframe.id} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    
+    const maxApiLimit = 1000;
+    let allData: any[] = [];
+    let currentStartTime = startTime;
+    
+    // Calculate interval in milliseconds
+    const intervalMs = convertIntervalToMinutes(timeframe.binanceInterval) * 60 * 1000;
+    
+    while (currentStartTime < endTime) {
+      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe.binanceInterval}&startTime=${currentStartTime}&endTime=${endTime}&limit=${maxApiLimit}`;
+      
+      const response = await withTimeout(
+        fetch(url),
+        10000,
+        `fetchKlineDataForDateRange for ${symbol} ${timeframe.binanceInterval}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data || data.length === 0) break;
+      
+      allData = [...allData, ...data];
+      
+      // Move to next batch
+      const lastCandle = data[data.length - 1];
+      currentStartTime = lastCandle[0] + intervalMs;
+      
+      // Break if we've fetched all available data
+      if (data.length < maxApiLimit) break;
+      
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Remove duplicates based on timestamp
+    const uniqueData = allData.filter((item, index, arr) => 
+      index === 0 || item[0] !== arr[index - 1][0]
+    );
+    
+    const formattedData: CandlestickData[] = uniqueData.map((item: any[]) => ({
+      time: item[0] / 1000,
+      open: parseFloat(item[1]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+      close: parseFloat(item[4]),
+    }));
+    
+    console.log(`[DATE RANGE FETCH] Fetched ${formattedData.length} candles for ${symbol} ${timeframe.id}`);
+    
+    return formattedData;
+  } catch (error) {
+    console.error(`Error fetching date range kline data for ${timeframe.label}:`, error);
+    return [];
+  }
+};
+
 export const getCurrentData = (timeframeId: string, symbol: CryptoSymbol): CandlestickData[] => {
   const key = `${symbol}-${timeframeId}`;
   return [...(candlestickData[key] || [])];
