@@ -29,71 +29,83 @@ const InfoModal: React.FC<{
     onClose: () => void;
     initialIndicators: InitialIndicator[];
     propagations: Propagation[];
-}> = ({ onClose, initialIndicators, propagations }) => {
+    allPredictions: Record<string, Record<string, PredictionEntry[]>>;
+    currentSymbol: string;
+}> = ({ onClose, initialIndicators, propagations, allPredictions, currentSymbol }) => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const totalSlides = 4;
     
     // Analyze active chains
     const chainAnalysis = useMemo(() => {
-        // Group propagations by chain ID
-        const chainGroups = new Map<string, Propagation[]>();
-        let maxTime = 0;
+        if (!allPredictions[currentSymbol]) return { totalActive: 0, upChains: 0, downChains: 0, chains: [] };
 
+        const tickerPredictions = allPredictions[currentSymbol];
+        
+        // 1. Group propagations by chain ID
+        const chainGroups = new Map<string, Propagation[]>();
         propagations.forEach(prop => {
             if (!chainGroups.has(prop.propagation_id)) {
                 chainGroups.set(prop.propagation_id, []);
             }
             chainGroups.get(prop.propagation_id)!.push(prop);
-
-            // Track the latest time across all data to determine "current" context
-            const propTime = new Date(prop.datetime.replace(' ', 'T') + 'Z').getTime();
-            if (propTime > maxTime) maxTime = propTime;
         });
-
-        // If no data, use current time, otherwise use the latest data point as "Now"
-        // This ensures historical data playback shows active chains relative to that history
-        const latestDataDate = maxTime > 0 ? new Date(maxTime) : new Date();
-        const oneDayAgo = new Date(latestDataDate.getTime() - 24 * 60 * 60 * 1000);
         
-        const activeChains = Array.from(chainGroups.entries()).map(([chainId, props]) => {
-            // Sort by propagation level
+        // 2. Build complete chain objects
+        const processedChains = initialIndicators.map((initialInd, index) => {
+            // Construct ID based on index (matching logic in indicatorAnalysis)
+            const chainId = `Chain_${index + 1}`;
+            const props = chainGroups.get(chainId) || [];
+            
+            // Sort propagations by level
             const sortedProps = [...props].sort((a, b) => a.propagation_level - b.propagation_level);
-            const maxLevel = Math.max(...sortedProps.map(p => p.propagation_level));
-            const latestProp = sortedProps[sortedProps.length - 1];
-            const latestTime = new Date(latestProp.datetime.replace(' ', 'T') + 'Z');
             
-            // Find the initial indicator for this chain
-            // Note: This index logic relies on extractTrendIndicators creating IDs as Chain_1, Chain_2...
-            // corresponding to initialIndicators[0], initialIndicators[1]...
-            const chainIndex = parseInt(chainId.split('_')[1], 10) - 1;
-            const initialIndicator = initialIndicators[chainIndex];
+            // Determine the "Longest Timescale" reached
+            const maxProp = sortedProps.length > 0 ? sortedProps[sortedProps.length - 1] : null;
+            const currentMaxTimeframe = maxProp ? maxProp.lower_freq : initialInd.timeframe;
+            const lastActionTime = maxProp ? maxProp.datetime : initialInd.datetime;
+            const lastActionTimestamp = new Date(lastActionTime.replace(' ', 'T') + 'Z').getTime();
+            const direction = initialInd.trend_type; // 1 or -1
+
+            // 3. Check for Termination
+            // A chain ends ONLY if the longest timescale it reached shows an opposing signal LATER than the propagation
+            const timeframePredictions = tickerPredictions[currentMaxTimeframe] || [];
             
+            const terminatingSignal = timeframePredictions.find(pred => {
+                const predTime = new Date(pred.datetime.replace(' ', 'T') + 'Z').getTime();
+                // Must be after the chain reached this level AND be an opposing signal
+                return predTime > lastActionTimestamp && pred.value === -direction;
+            });
+
+            const isActive = !terminatingSignal;
+
             return {
                 chainId,
-                direction: latestProp.trend_type > 0 ? 'UP' : 'DOWN',
-                maxLevel,
-                latestTimeframe: latestProp.lower_freq,
-                startTime: initialIndicator?.datetime || latestProp.datetime,
-                latestTime: latestProp.datetime,
-                latestTimestamp: latestTime.getTime(),
-                // A chain is "Recent" if its latest propagation is within 24h of the dataset's latest point
-                isRecent: latestTime >= oneDayAgo,
+                direction: direction > 0 ? 'UP' : 'DOWN',
+                maxLevel: maxProp ? maxProp.propagation_level : 0,
+                latestTimeframe: currentMaxTimeframe,
+                startTime: initialInd.datetime,
+                latestTime: lastActionTime,
+                latestTimestamp: lastActionTimestamp,
+                isActive,
                 timeframes: sortedProps.map(p => p.lower_freq),
-                initialTimeframe: initialIndicator?.timeframe || sortedProps[0].higher_freq
+                initialTimeframe: initialInd.timeframe
             };
-        }).filter(chain => chain.isRecent);
+        });
+
+        // 4. Filter only Active chains
+        const activeChains = processedChains.filter(chain => chain.isActive);
         
         return {
             totalActive: activeChains.length,
             upChains: activeChains.filter(c => c.direction === 'UP').length,
             downChains: activeChains.filter(c => c.direction === 'DOWN').length,
             chains: activeChains.sort((a, b) => {
-                // Sort by Level (Desc), then by Recency (Desc)
+                // Sort by Level (Desc), then by Latest Timestamp (Desc)
                 if (b.maxLevel !== a.maxLevel) return b.maxLevel - a.maxLevel;
                 return b.latestTimestamp - a.latestTimestamp;
             })
         };
-    }, [initialIndicators, propagations]);
+    }, [initialIndicators, propagations, allPredictions, currentSymbol]);
 
     const nextSlide = () => setCurrentSlide(prev => Math.min(prev + 1, totalSlides - 1));
     const prevSlide = () => setCurrentSlide(prev => Math.max(prev - 1, 0));
@@ -131,7 +143,7 @@ const InfoModal: React.FC<{
 
                             <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
                                 <p className="text-[#ccc] leading-relaxed">
-                                    Statistical indicators try to guess where the price will be in 1 hour. <span className="text-white font-semibold">Our approach doesn't.</span>
+                                    Statistical models try to guess where the price will be in 1 hour. <span className="text-white font-semibold">Our technology doesn't.</span>
                                 </p>
                                 <p className="text-[#ccc] leading-relaxed">
                                     Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> using different timescales.
@@ -224,11 +236,11 @@ const InfoModal: React.FC<{
 
                             <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
                                 <p className="text-[#ccc] leading-relaxed">
-                                    A chain doesn't last forever. It ends when we detect an <span className="text-red-400 font-semibold">Opposing Signal</span>.
+                                    A chain doesn't last forever. It ends when we detect an <span className="text-red-400 font-semibold">Opposing Signal</span> on the <span className="text-white font-semibold">longest timeframe it has reached</span>.
                                 </p>
                                 <div className="bg-[#1a1a1a] p-4 rounded border border-red-900">
                                     <p className="text-[#ccc]">
-                                        If you are tracking an <span className="text-green-400 font-semibold">UP chain</span>, and a <span className="text-red-400 font-semibold">DOWN signal</span> appears on the current timeframe you're tracking, the chain is broken. This is <span className="text-red-400 font-semibold">Termination</span>. The chain that was started has finally been ended.
+                                        If you are tracking an <span className="text-green-400 font-semibold">UP chain</span> that has reached the <span className="text-blue-400 font-semibold">15m</span> timeframe, it stays active until a <span className="text-red-400 font-semibold">DOWN signal</span> appears on the <span className="text-blue-400 font-semibold">15m</span> timeframe.
                                     </p>
                                 </div>
                             </div>
@@ -261,7 +273,7 @@ const InfoModal: React.FC<{
                                         <tr className="hover:bg-[#252525]">
                                             <td className="border border-[#3a3a3a] px-3 py-2 text-red-400 font-semibold">Termination</td>
                                             <td className="border border-[#3a3a3a] px-3 py-2">
-                                                <span className="text-red-400">● Opposing Dot (on the current timescale you're tracking)</span>
+                                                <span className="text-red-400">● Opposing Dot (on the max timescale reached)</span>
                                             </td>
                                             <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is over."</td>
                                         </tr>
@@ -297,7 +309,7 @@ const InfoModal: React.FC<{
                             {chainAnalysis.totalActive > 0 ? (
                                 <>
                                     <div className="bg-[#2a2a2a] p-4 rounded-lg">
-                                        <h4 className="text-white font-semibold mb-3">Current Chains (In Dataset)</h4>
+                                        <h4 className="text-white font-semibold mb-3">Current Active Chains</h4>
                                         <div className="space-y-3 max-h-64 overflow-y-auto">
                                             {chainAnalysis.chains.map((chain, idx) => (
                                                 <div key={chain.chainId} className="bg-[#1a1a1a] p-3 rounded border border-[#3a3a3a]">
@@ -326,7 +338,7 @@ const InfoModal: React.FC<{
                                                         ))}
                                                     </div>
                                                     <div className="text-xs text-[#666] mt-2">
-                                                        Started: {chain.startTime} • Latest: {chain.latestTime}
+                                                        Started: {chain.startTime} • Latest Step: {chain.latestTimeframe}
                                                     </div>
                                                 </div>
                                             ))}
@@ -335,7 +347,7 @@ const InfoModal: React.FC<{
 
                                     <div className="bg-blue-900/20 border border-blue-900 p-4 rounded-lg">
                                         <p className="text-sm text-blue-300">
-                                            💡 <strong>Tip:</strong> Chains with higher propagation levels (Level 3+) indicate stronger, more sustained movements.
+                                            💡 <strong>Tip:</strong> Chains remain active until an opposing signal appears on the <strong>largest timeframe</strong> they have reached.
                                         </p>
                                     </div>
                                 </>
@@ -885,6 +897,8 @@ useEffect(() => {
                     onClose={() => setShowInfoModal(false)} 
                     initialIndicators={initialIndicators}
                     propagations={propagations}
+                    allPredictions={allPredictionsData}
+                    currentSymbol={currentSymbol}
                 />
             )}
 
