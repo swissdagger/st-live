@@ -131,7 +131,7 @@ const InfoModal: React.FC<{
 
                             <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
                                 <p className="text-[#ccc] leading-relaxed">
-                                    Most indicators try to guess where the price will be in 1 hour. <span className="text-white font-semibold">We don't.</span>
+                                    Statistical indicators try to guess where the price will be in 1 hour. <span className="text-white font-semibold">Our approach doesn't.</span>
                                 </p>
                                 <p className="text-[#ccc] leading-relaxed">
                                     Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> using different timescales.
