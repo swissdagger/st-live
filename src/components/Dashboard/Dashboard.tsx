@@ -347,7 +347,7 @@ const InfoModal: React.FC<{
 
                                     <div className="bg-blue-900/20 border border-blue-900 p-4 rounded-lg">
                                         <p className="text-sm text-blue-300">
-                                            💡 <strong>Tip:</strong> Chains remain active until an opposing signal appears on the <strong>largest timeframe</strong> they have reached.
+                                            💡 <strong>Tip:</strong> Chains remain active until an opposing chain <strong>reaches the same level of propagation.</strong>
                                         </p>
                                     </div>
                                 </>
@@ -368,10 +368,10 @@ const InfoModal: React.FC<{
                                     This deployment tracks BTCUSDT across <span className="font-mono text-blue-400">1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, and 1d</span> timeframes.
                                 </p>
                                 <p className="text-[#999] text-xs">
-                                    Live data from api.binance.com starting January 13, 2026 20:30:00 GMT
+                                    Live data from api.binance.com starting January 13, 2026 20:30:00 GMT (maintenance Jan 14-17)
                                 </p>
                                 <p className="text-[#ccc] text-sm">
-                                    Visit <a href="https://www.sumtyme.ai" className="text-blue-400 underline hover:text-blue-300">sumtyme.ai</a> to learn more and sign up for free API credits.
+                                    Visit <a href="https://www.sumtyme.ai" className="text-white-500 underline hover:text-blue-300">our website</a> to learn more and sign up for free API credits.
                                 </p>
                             </div>
                         </div>
