@@ -120,7 +120,7 @@ const InfoModal: React.FC<{
                                     Most indicators try to guess where the price will be in 1 hour. <span className="text-white font-semibold">We don't.</span>
                                 </p>
                                 <p className="text-[#ccc] leading-relaxed">
-                                    Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> across timeframes (Propagation).
+                                    Instead, <span className="text-blue-400 font-semibold">sumtyme.ai</span> detects when a directional move <span className="text-green-400">starts</span> (Initiation) and tracks it as it <span className="text-green-400">grows stronger</span> using different timescales.
                                 </p>
                                 <div className="bg-[#1a1a1a] p-4 rounded border border-[#3a3a3a] mt-4">
                                     <p className="text-white italic">
@@ -135,7 +135,7 @@ const InfoModal: React.FC<{
                                 </div>
                                 <div>
                                     <h4 className="text-white font-semibold mb-1">Key Takeaway</h4>
-                                    <p className="text-[#ccc]">We track the <span className="text-blue-400 font-semibold">chain of events</span>, not just a single moment in time.</p>
+                                    <p className="text-[#ccc]">We track the <span className="text-blue-400 font-semibold">causal chain of events</span>, not just a single moment in time.</p>
                                 </div>
                             </div>
                         </div>
@@ -145,11 +145,11 @@ const InfoModal: React.FC<{
                         <div className="space-y-6">
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-bold text-white mb-2">The Chain Reaction</h3>
-                                <p className="text-[#999]">How momentum spreads from small to large timeframes</p>
+                                <p className="text-[#999]">How change evolves from small to large timeframes</p>
                             </div>
 
                             <p className="text-[#ccc] leading-relaxed">
-                                Market moves often start on <span className="text-green-400 font-semibold">small timeframes</span> before they affect the larger trend. We call this a <span className="text-blue-400 font-semibold">Causal Chain</span>.
+                                Directional moves start on <span className="text-green-400 font-semibold">smallest timescale</span> and then move to larger timescales and they evolve. We call this a <span className="text-blue-400 font-semibold">Causal Chain</span>.
                             </p>
 
                             {/* Domino Effect Visual */}
@@ -178,7 +178,7 @@ const InfoModal: React.FC<{
                                     <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">1</div>
                                     <div>
                                         <h4 className="text-white font-semibold mb-1">The Spark (Initiation)</h4>
-                                        <p className="text-[#ccc] text-sm">We detect a signal on the smallest timeframe (e.g., <span className="font-mono text-green-400">1m</span>). The first domino has fallen. <span className="text-green-400">● Your first dot appears.</span></p>
+                                        <p className="text-[#ccc] text-sm">For example, suppose we detect a <span className="font-mono text-green-400">+1</span> signal (a green dot) on the smallest timeframe (<span className="font-mono text-green-400">1m</span> in this example). The first domino has fallen. <span className="text-green-400">● Your first dot appears.</span></p>
                                     </div>
                                 </div>
 
@@ -186,15 +186,15 @@ const InfoModal: React.FC<{
                                     <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">2</div>
                                     <div>
                                         <h4 className="text-white font-semibold mb-1">The Spread (Propagation)</h4>
-                                        <p className="text-[#ccc] text-sm">If the momentum is real, that <span className="font-mono text-green-400">1m</span> signal will trigger a <span className="font-mono text-blue-400">3m</span> signal, then a <span className="font-mono text-blue-400">5m</span> signal. <span className="text-blue-400">● More dots appear, connected by the same chain.</span></p>
+                                        <p className="text-[#ccc] text-sm">If that directional change is growing into a sustained, prolonged change, that <span className="font-mono text-green-400">1m</span> signal will trigger a matching signal on lower timeframes. In this example, that would be a green dot on the <span className="font-mono text-blue-400">3m</span> timescale, then a green dot on the <span className="font-mono text-blue-400">5m</span> 5m timescale. <span className="text-blue-400">● Aligning dots appear, connected by the same chain.</span> Crucially, whenever we see a dot on one timescale, we then immediately move to the next longest one for the chain we're tracking.</p>
                                     </div>
                                 </div>
 
                                 <div className="flex items-start gap-3 bg-[#2a2a2a] p-4 rounded-lg">
                                     <div className="flex-shrink-0 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold">3</div>
                                     <div>
-                                        <h4 className="text-white font-semibold mb-1">The Trend</h4>
-                                        <p className="text-[#ccc] text-sm">As long as the chain is propagating to larger timeframes, the directional move is <span className="text-green-400 font-semibold">healthy and growing</span>. The longer the chain, the stronger the momentum.</p>
+                                        <h4 className="text-white font-semibold mb-1">The Directional Move</h4>
+                                        <p className="text-[#ccc] text-sm">As long as the chain is propagating to larger timeframes, the directional move is <span className="text-green-400 font-semibold">healthy and growing</span>. The longer the chain, the more prolonged and sustained the change on its path to a large-scale, macro movement.</p>
                                     </div>
                                 </div>
                             </div>
@@ -205,7 +205,7 @@ const InfoModal: React.FC<{
                         <div className="space-y-6">
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-bold text-white mb-2">The Chain Breaks</h3>
-                                <p className="text-[#999]">When momentum ends</p>
+                                <p className="text-[#999]">When a chain ends</p>
                             </div>
 
                             <div className="bg-[#2a2a2a] p-6 rounded-lg space-y-4">
@@ -214,7 +214,7 @@ const InfoModal: React.FC<{
                                 </p>
                                 <div className="bg-[#1a1a1a] p-4 rounded border border-red-900">
                                     <p className="text-[#ccc]">
-                                        If you are tracking an <span className="text-green-400 font-semibold">UP chain</span>, and a <span className="text-red-400 font-semibold">DOWN signal</span> appears on the current timeframe, the momentum is broken. This is <span className="text-red-400 font-semibold">Termination</span>. The chain is closed, and the trade opportunity is over.
+                                        If you are tracking an <span className="text-green-400 font-semibold">UP chain</span>, and a <span className="text-red-400 font-semibold">DOWN signal</span> appears on the current timeframe you're tracking, the chain is broken. This is <span className="text-red-400 font-semibold">Termination</span>. The chain that was started has finally been ended.
                                     </p>
                                 </div>
                             </div>
@@ -242,14 +242,14 @@ const InfoModal: React.FC<{
                                             <td className="border border-[#3a3a3a] px-3 py-2">
                                                 <span className="text-blue-400">● New Dots (3m, 5m)</span>
                                             </td>
-                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is getting stronger."</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is continuing."</td>
                                         </tr>
                                         <tr className="hover:bg-[#252525]">
                                             <td className="border border-[#3a3a3a] px-3 py-2 text-red-400 font-semibold">Termination</td>
                                             <td className="border border-[#3a3a3a] px-3 py-2">
-                                                <span className="text-red-400">● Opposing Dot</span>
+                                                <span className="text-red-400">● Opposing Dot (on the current timescale you're tracking)</span>
                                             </td>
-                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is over. Exit now."</td>
+                                            <td className="border border-[#3a3a3a] px-3 py-2 text-[#ccc]">"The move is over."</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -321,7 +321,7 @@ const InfoModal: React.FC<{
 
                                     <div className="bg-blue-900/20 border border-blue-900 p-4 rounded-lg">
                                         <p className="text-sm text-blue-300">
-                                            💡 <strong>Tip:</strong> Chains with higher propagation levels (Level 3+) indicate stronger, more sustained momentum across multiple timeframes.
+                                            💡 <strong>Tip:</strong> Chains with higher propagation levels (Level 3+) indicate stronger, more sustained movements.
                                         </p>
                                     </div>
                                 </>
