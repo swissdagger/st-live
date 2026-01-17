@@ -3,11 +3,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/sumtyme_server/index.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
-  ],
-  "functions": {
-    "sumtyme_server/*.py": {
-      "maxDuration": 10
-    }
-  }
+  ]
 }
