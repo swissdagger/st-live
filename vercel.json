@@ -5,9 +5,4 @@
       "destination": "/sumtyme_server/index.py"
     }
   ],
-  "functions": {
-    "sumtyme_server/*.py": {
-      "runtime": "python3.9"
-    }
-  }
 }
