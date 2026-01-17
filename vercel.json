@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/sumtyme-server/index.py"
+    }
+  ],
+  "functions": {
+    "sumtyme-server/*.py": {
+      "runtime": "python3.9"
+    }
+  }
+}
