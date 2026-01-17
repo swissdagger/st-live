@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { CandlestickData, ChartContainerProps, PredictionEntry, ArrowPosition } from '../../types';
-import { fetchKlineData, subscribeToUpdates, getCurrentData, parseAndValidateTimeframeInput, calculateDataLimit } from '../../api/binanceAPI';
+import { fetchKlineData, subscribeToUpdates, getCurrentData, parseAndValidateTimeframeInput, calculateDataLimit,fetchKlineDataForDateRange } from '../../api/binanceAPI';
 import { subscribeToPredictionUpdates, getCurrentPredictions, subscribeToViewUpdates, SUPPORTED_PREDICTION_INTERVALS } from '../../api/sumtymeAPI';
 import { getPredictionsToDisplay, organizePredictionsByTicker } from '../../utils/propagationTracker';
 import PredictionArrow from './PredictionArrow';
